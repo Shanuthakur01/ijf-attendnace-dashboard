@@ -11,10 +11,13 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const db = await getDb();
-    const today = todayStr();
+    
+    const url = new URL(request.url);
+    const dateParam = url.searchParams.get("date");
+    const targetDate = dateParam || todayStr();
 
     const enrolled: string[] = (
       await db
@@ -25,7 +28,7 @@ export async function GET() {
 
     const records = (await db
       .collection("attendance")
-      .find({ date: today }, { projection: { _id: 0 } })
+      .find({ date: targetDate }, { projection: { _id: 0 } })
       .toArray()) as unknown as AttendanceRecord[];
 
     const recordMap = new Map(records.map((r) => [r.name, r]));
@@ -59,7 +62,7 @@ export async function GET() {
     const totalAbsent = enrolled.length - totalPresent;
 
     return NextResponse.json({
-      today,
+      today: targetDate,
       totalEnrolled: enrolled.length,
       totalPresent,
       totalAbsent,

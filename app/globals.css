@@ -256,6 +256,15 @@ input:focus-visible {
 }
 
 /* ============================================
+   LAPTOP  (≤ 1024px)
+   ============================================ */
+@media (max-width: 1024px) {
+  .stats-row {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* ============================================
    TABLET  (≤ 768px)
    ============================================ */
 @media (max-width: 768px) {
@@ -273,10 +282,7 @@ input:focus-visible {
 
   .top-actions {
     gap: 6px !important;
-  }
-
-  .date-pill-el {
-    display: none !important;
+    justify-content: flex-end;
   }
 
   .stats-row {

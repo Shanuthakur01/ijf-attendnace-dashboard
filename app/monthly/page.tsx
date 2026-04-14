@@ -66,7 +66,8 @@ export default function MonthlyPage() {
     .sort((a, b) => b.hoursDecimal - a.hoursDecimal)
     .slice(0, 10)
     .map((p) => ({
-      name: p.name.replace(/\(.*?\)/g, "").trim().split(" ")[0],
+      name: titleCase(p.name.replace(/\(.*?\)/g, "").trim()),
+      originalName: p.name,
       hours: Math.round(p.hoursDecimal * 10) / 10,
     }));
 
@@ -146,7 +147,7 @@ export default function MonthlyPage() {
                   tick={{ fill: "var(--text-secondary)", fontSize: 12 }}
                   axisLine={false}
                   tickLine={false}
-                  width={70}
+                  width={150}
                 />
                 <Tooltip
                   contentStyle={tooltipStyle}
@@ -157,6 +158,11 @@ export default function MonthlyPage() {
                   fill="var(--accent-purple)"
                   radius={[0, 6, 6, 0]}
                   animationDuration={600}
+                  onClick={(data) => {
+                    const name = data.payload?.originalName || data.name;
+                    if (name) window.location.href = `/employee/${encodeURIComponent(name)}`;
+                  }}
+                  cursor="pointer"
                 />
               </BarChart>
             </ResponsiveContainer>

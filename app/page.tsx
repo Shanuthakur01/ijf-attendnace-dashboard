@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import html2canvas from "html2canvas";
 import {
   BarChart,
   Bar,
@@ -39,7 +40,8 @@ interface DashboardData {
   lastUpdated: string;
 }
 
-const HALF_DAY_MAX_HOURS = 4;
+const STAFF_HALF_DAY_MAX_HOURS = 8.5;
+const STUDENT_HALF_DAY_MAX_HOURS = 4;
 
 /* ------------------------------------------------------------------ */
 /*  Page                                                               */
@@ -52,6 +54,7 @@ export default function DashboardPage() {
   const [downloading, setDownloading] = useState(false);
   const [tab, setTab] = useState<"staff" | "students">("staff");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [viewDate, setViewDate] = useState("");
 
   /* ---- Theme bootstrap ---- */
   useEffect(() => {
@@ -72,7 +75,8 @@ export default function DashboardPage() {
   /* ---- Data fetch ---- */
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/attendance");
+      const url = viewDate ? `/api/attendance?date=${viewDate}` : "/api/attendance";
+      const res = await fetch(url);
       if (!res.ok) {
         const body = await res.json().catch(() => null);
         throw new Error(body?.error || `Server error (${res.status})`);
@@ -83,7 +87,7 @@ export default function DashboardPage() {
     } catch (e: any) {
       setError(e.message);
     }
-  }, [reportDate]);
+  }, [reportDate, viewDate]);
 
   useEffect(() => {
     load();
@@ -113,6 +117,59 @@ export default function DashboardPage() {
     }
   };
 
+  const takeScreenshot = async () => {
+    const el = document.getElementById("dashboard-content");
+    if (!el) return;
+    try {
+      const canvas = await html2canvas(el, { 
+        scale: 2, 
+        backgroundColor: theme === "dark" ? "#0f172a" : "#f8fafc",
+        onclone: (clonedDoc) => {
+          // Remove fade-up animations so cards don't stay invisible during the capture clone
+          const fadeElements = clonedDoc.querySelectorAll(".fade-up");
+          fadeElements.forEach((e) => {
+            e.classList.remove("fade-up");
+            (e as HTMLElement).style.animation = "none";
+            (e as HTMLElement).style.opacity = "1";
+            (e as HTMLElement).style.transform = "none";
+          });
+        }
+      });
+      const url = canvas.toDataURL("image/png");
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `attendance_screenshot_${data?.today || "date"}.png`;
+      a.click();
+    } catch (err) {
+      console.error("Screenshot failed", err);
+      alert("Failed to take screenshot.");
+    }
+  };
+
+  const getLocalToday = () => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  const changeDateBy = (days: number) => {
+    const baseDateStr = viewDate || data?.today;
+    if (!baseDateStr) return;
+    const [y, m, d] = baseDateStr.split("-").map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    dateObj.setDate(dateObj.getDate() + days);
+    
+    const newY = dateObj.getFullYear();
+    const newM = String(dateObj.getMonth() + 1).padStart(2, "0");
+    const newD = String(dateObj.getDate()).padStart(2, "0");
+    const newDateStr = `${newY}-${newM}-${newD}`;
+
+    if (newDateStr > getLocalToday() && days > 0) return;
+    setViewDate(newDateStr);
+  };
+
   if (error) return <ErrorScreen message={error} onRetry={() => window.location.reload()} />;
   if (!data) return <LoadingSkeleton />;
 
@@ -121,17 +178,18 @@ export default function DashboardPage() {
   const staffPresent = data.staff.filter((p) => p.present).length;
   const staffAbsent  = staffTotal - staffPresent;
   const staffHalfDay = data.staff.filter(
-    (p) => p.present && p.hoursDecimal > 0 && p.hoursDecimal < HALF_DAY_MAX_HOURS
+    (p) => p.present && p.hoursDecimal > 0 && p.hoursDecimal < STAFF_HALF_DAY_MAX_HOURS
   ).length;
 
   const studentTotal   = data.students.length;
   const studentPresent = data.students.filter((p) => p.present).length;
   const studentAbsent  = studentTotal - studentPresent;
   const studentHalfDay = data.students.filter(
-    (p) => p.present && p.hoursDecimal > 0 && p.hoursDecimal < HALF_DAY_MAX_HOURS
+    (p) => p.present && p.hoursDecimal > 0 && p.hoursDecimal < STUDENT_HALF_DAY_MAX_HOURS
   ).length;
 
   const isStaff     = tab === "staff";
+  const halfDayThreshold = isStaff ? STAFF_HALF_DAY_MAX_HOURS : STUDENT_HALF_DAY_MAX_HOURS;
   const statTotal   = isStaff ? staffTotal   : studentTotal;
   const statPresent = isStaff ? staffPresent : studentPresent;
   const statAbsent  = isStaff ? staffAbsent  : studentAbsent;
@@ -149,14 +207,15 @@ export default function DashboardPage() {
     .sort((a, b) => b.hoursDecimal - a.hoursDecimal)
     .slice(0, 12)
     .map((p) => ({
-      name: p.name.replace(/\(.*?\)/g, "").trim().split(" ")[0],
+      name: titleCase(p.name.replace(/\(.*?\)/g, "").trim()),
+      originalName: p.name,
       hours: Math.round(p.hoursDecimal * 10) / 10,
     }));
 
   const sortedList = [...activeList].sort((a, b) => Number(a.present) - Number(b.present));
 
   return (
-    <div style={{ minHeight: "100vh" }}>
+    <div id="dashboard-content" style={{ minHeight: "100vh", paddingBottom: 20 }}>
 
       {/* ── Top Bar ─────────────────────────────────────────── */}
       <header className="topbar" style={styles.topbar}>
@@ -191,8 +250,46 @@ export default function DashboardPage() {
         </div>
 
         {/* Right: actions */}
-        <div className="top-actions" style={styles.topActions}>
-          <span className="date-pill-el" style={styles.datePill}>{data.today}</span>
+        <div className="top-actions" style={{...styles.topActions, flexWrap: "wrap"}}>
+          <div className="date-pill-el" style={{ ...styles.datePill, display: "flex", alignItems: "center", padding: 0, overflow: "hidden" }}>
+            <button 
+              className="nav-btn-el"
+              onClick={() => changeDateBy(-1)}
+              style={{ background: "transparent", border: "none", padding: "6px 10px", color: "inherit", cursor: "pointer", fontSize: 16, lineHeight: 1 }}
+              title="Previous Day"
+            >
+              ‹
+            </button>
+            <input
+              type="date"
+              value={viewDate || data.today}
+              max={getLocalToday()}
+              onChange={(e) => setViewDate(e.target.value)}
+              style={{ background: "transparent", border: "none", color: "inherit", fontFamily: "inherit", outline: "none", cursor: "pointer", fontSize: "12px", padding: "6px 0" }}
+              title="Select Date"
+            />
+            <button 
+              className="nav-btn-el"
+              onClick={() => changeDateBy(1)}
+              disabled={(viewDate || data.today) >= getLocalToday()}
+              style={{ 
+                background: "transparent", 
+                border: "none", 
+                padding: "6px 10px", 
+                color: "inherit", 
+                cursor: (viewDate || data.today) >= getLocalToday() ? "default" : "pointer", 
+                opacity: (viewDate || data.today) >= getLocalToday() ? 0.3 : 1, 
+                fontSize: 16, 
+                lineHeight: 1 
+              }}
+              title="Next Day"
+            >
+              ›
+            </button>
+          </div>
+          <button className="nav-btn-el" style={styles.navBtn} onClick={takeScreenshot}>
+            📷 Screenshot
+          </button>
           <Link href="/monthly" className="nav-btn-el" style={styles.navBtn}>
             Monthly
           </Link>
@@ -240,14 +337,19 @@ export default function DashboardPage() {
 
       {/* ── Person Cards ────────────────────────────────────── */}
       <div className="card-grid" style={styles.cardGrid}>
-        {sortedList.map((p, i) => (
+        {sortedList.map((p, i) => {
+          const isHalfDay = p.present && p.hoursDecimal > 0 && p.hoursDecimal < halfDayThreshold;
+          
+          return (
           <Link
             key={p.name}
             href={`/employee/${encodeURIComponent(p.name)}`}
             className="emp-card fade-up"
             style={{
               ...styles.empCard,
-              borderLeftColor: p.present ? "var(--accent-green)" : "var(--accent-red)",
+              borderLeftColor: p.present 
+                ? (isHalfDay ? "var(--accent-amber)" : "var(--accent-green)") 
+                : "var(--accent-red)",
               background: p.present
                 ? "var(--bg-card)"
                 : "var(--absent-tint, rgba(239,68,68,0.04))",
@@ -259,7 +361,7 @@ export default function DashboardPage() {
               style={{
                 ...styles.avatar,
                 background: p.present
-                  ? "linear-gradient(135deg, #16a34a, #22c55e)"
+                  ? (isHalfDay ? "linear-gradient(135deg, #d97706, #f59e0b)" : "linear-gradient(135deg, #16a34a, #22c55e)")
                   : "linear-gradient(135deg, #b91c1c, #ef4444)",
               }}
             >
@@ -290,17 +392,25 @@ export default function DashboardPage() {
               <span
                 style={{
                   ...styles.badge,
-                  background: p.present ? "var(--accent-green-dim)" : "var(--accent-red-dim)",
-                  color: p.present ? "var(--accent-green)" : "var(--accent-red)",
-                  border: `1px solid ${p.present ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)"}`,
+                  background: p.present 
+                    ? (isHalfDay ? "var(--accent-amber-dim)" : "var(--accent-green-dim)") 
+                    : "var(--accent-red-dim)",
+                  color: p.present 
+                    ? (isHalfDay ? "var(--accent-amber)" : "var(--accent-green)") 
+                    : "var(--accent-red)",
+                  border: `1px solid ${
+                    p.present 
+                      ? (isHalfDay ? "rgba(245,158,11,0.25)" : "rgba(34,197,94,0.25)") 
+                      : "rgba(239,68,68,0.25)"
+                  }`,
                 }}
               >
-                {p.present ? "PRESENT" : "ABSENT"}
+                {p.present ? (isHalfDay ? "HALF-DAY" : "PRESENT") : "ABSENT"}
               </span>
               <div style={styles.arrow}>›</div>
             </div>
           </Link>
-        ))}
+        )})}
         {activeList.length === 0 && (
           <p style={{ color: "var(--text-muted)", padding: 40, textAlign: "center", gridColumn: "1/-1" }}>
             No {tab} enrolled
@@ -363,6 +473,9 @@ export default function DashboardPage() {
                     tick={{ fill: "var(--text-muted)", fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
+                    angle={-35}
+                    textAnchor="end"
+                    height={60}
                   />
                   <YAxis
                     tick={{ fill: "var(--text-muted)", fontSize: 11 }}
@@ -374,7 +487,16 @@ export default function DashboardPage() {
                     contentStyle={tooltipStyle}
                     formatter={(v: number) => [`${v}h`, "Hours"]}
                   />
-                  <Bar dataKey="hours" fill="var(--accent-blue)" radius={[6, 6, 0, 0]}>
+                  <Bar 
+                    dataKey="hours" 
+                    fill="var(--accent-blue)" 
+                    radius={[6, 6, 0, 0]}
+                    onClick={(data) => {
+                      const name = data.payload?.originalName || data.name;
+                      if (name) window.location.href = `/employee/${encodeURIComponent(name)}`;
+                    }}
+                    cursor="pointer"
+                  >
                     <LabelList
                       dataKey="hours"
                       position="center"
