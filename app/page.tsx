@@ -121,11 +121,11 @@ export default function DashboardPage() {
     const el = document.getElementById("dashboard-content");
     if (!el) return;
     try {
+      setDownloading(true);
       const canvas = await html2canvas(el, { 
         scale: 2, 
         backgroundColor: theme === "dark" ? "#0f172a" : "#f8fafc",
         onclone: (clonedDoc) => {
-          // Remove fade-up animations so cards don't stay invisible during the capture clone
           const fadeElements = clonedDoc.querySelectorAll(".fade-up");
           fadeElements.forEach((e) => {
             e.classList.remove("fade-up");
@@ -143,6 +143,17 @@ export default function DashboardPage() {
     } catch (err) {
       console.error("Screenshot failed", err);
       alert("Failed to take screenshot.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      window.location.href = "/login";
+    } catch (e) {
+      window.location.href = "/login";
     }
   };
 
@@ -184,9 +195,7 @@ export default function DashboardPage() {
   const studentTotal   = data.students.length;
   const studentPresent = data.students.filter((p) => p.present).length;
   const studentAbsent  = studentTotal - studentPresent;
-  const studentHalfDay = data.students.filter(
-    (p) => p.present && p.hoursDecimal > 0 && p.hoursDecimal < STUDENT_HALF_DAY_MAX_HOURS
-  ).length;
+  const studentHalfDay = 0; // Disabled half-day tracking for students
 
   const isStaff     = tab === "staff";
   const halfDayThreshold = isStaff ? STAFF_HALF_DAY_MAX_HOURS : STUDENT_HALF_DAY_MAX_HOURS;
@@ -305,6 +314,15 @@ export default function DashboardPage() {
           >
             {theme === "dark" ? "☀" : "🌙"}
           </button>
+          {/* Lock Screen */}
+          <button
+            className="theme-btn-el logout-btn"
+            style={{...styles.themeBtn, border: "1px solid var(--accent-red-dim)", color: "var(--accent-red)"}}
+            onClick={handleLogout}
+            title="Lock Dashboard"
+          >
+            🔒
+          </button>
         </div>
       </header>
 
@@ -338,7 +356,13 @@ export default function DashboardPage() {
       {/* ── Person Cards ────────────────────────────────────── */}
       <div className="card-grid" style={styles.cardGrid}>
         {sortedList.map((p, i) => {
-          const isHalfDay = p.present && p.hoursDecimal > 0 && p.hoursDecimal < halfDayThreshold;
+          const isHalfDay = isStaff && p.present && p.hoursDecimal > 0 && p.hoursDecimal < halfDayThreshold;
+          
+          const rawName = p.name.replace(/\(.*?\)/g, "").trim();
+          const words = rawName.split(" ").filter(Boolean);
+          const computedInitials = words.length > 1 
+            ? (words[0][0] + words[1][0]).toUpperCase()
+            : (words[0] ? words[0].substring(0, 2).toUpperCase() : "??");
           
           return (
           <Link
@@ -365,7 +389,7 @@ export default function DashboardPage() {
                   : "linear-gradient(135deg, #b91c1c, #ef4444)",
               }}
             >
-              {p.initials}
+              {computedInitials}
             </div>
 
             {/* Info */}
