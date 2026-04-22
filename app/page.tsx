@@ -117,6 +117,31 @@ export default function DashboardPage() {
     }
   };
 
+  const downloadMonthlyReport = async (type: "staff" | "student") => {
+    setDownloading(true);
+    try {
+      const res = await fetch(`/api/report/monthly?type=${type}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        alert(body?.error || "Download failed");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      
+      const monthStr = new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" }).replace(/\s+/g, "_").toLowerCase();
+      a.download = `monthly_${type}_attendance_${monthStr}.xlsx`;
+      
+      a.click();
+      URL.revokeObjectURL(url);
+      setShowModal(false);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const takeScreenshot = async () => {
     const el = document.getElementById("dashboard-content");
     if (!el) return;
@@ -549,46 +574,71 @@ export default function DashboardPage() {
       {/* ── Download Modal ──────────────────────────────────── */}
       {showModal && (
         <div className="modal-overlay" style={styles.overlay} onClick={() => setShowModal(false)}>
-          <div className="modal" style={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <div style={{ marginBottom: 20 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Download Report</h2>
-              <p style={{ color: "var(--text-muted)", fontSize: 13 }}>
-                Select a date to export the Excel report
-              </p>
+          <div className="modal" style={{ ...styles.modal, maxWidth: 450 }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div>
+                <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Download Reports</h2>
+                <p style={{ color: "var(--text-muted)", fontSize: 13 }}>
+                  Export daily or monthly attendance records
+                </p>
+              </div>
+              <button style={{ ...styles.cancelBtn, padding: "4px 8px" }} onClick={() => setShowModal(false)}>✕</button>
             </div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-              <button className="quick-btn-el" style={styles.quickBtn} onClick={() => setReportDate(data.today)}>
-                Today
-              </button>
-              <button
-                className="quick-btn-el"
-                style={styles.quickBtn}
-                onClick={() => {
-                  const y = new Date();
-                  y.setDate(y.getDate() - 1);
-                  setReportDate(y.toISOString().split("T")[0]);
-                }}
-              >
-                Yesterday
-              </button>
-            </div>
-            <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>
-              Date
-            </label>
-            <input
-              type="date"
-              value={reportDate}
-              max={data.today}
-              onChange={(e) => setReportDate(e.target.value)}
-              style={styles.dateInput}
-            />
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
-              <button style={styles.cancelBtn} onClick={() => setShowModal(false)}>
-                Cancel
-              </button>
-              <button style={styles.dlBtn} onClick={downloadReport} disabled={downloading}>
-                {downloading ? "Preparing…" : "↓ Download Excel"}
-              </button>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              {/* Daily Report */}
+              <div style={{ background: "var(--bg-elevated)", padding: 16, borderRadius: 12, border: "1px solid var(--border-light)" }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Daily Report</h3>
+                <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                  <button className="quick-btn-el" style={styles.quickBtn} onClick={() => setReportDate(data.today)}>
+                    Today
+                  </button>
+                  <button
+                    className="quick-btn-el"
+                    style={styles.quickBtn}
+                    onClick={() => {
+                      const y = new Date();
+                      y.setDate(y.getDate() - 1);
+                      setReportDate(y.toISOString().split("T")[0]);
+                    }}
+                  >
+                    Yesterday
+                  </button>
+                </div>
+                <div style={{ display: "flex", gap: 12, alignItems: "flex-end" }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>
+                      Select Date
+                    </label>
+                    <input
+                      type="date"
+                      value={reportDate}
+                      max={data.today}
+                      onChange={(e) => setReportDate(e.target.value)}
+                      style={{ ...styles.dateInput, width: "100%", marginBottom: 0 }}
+                    />
+                  </div>
+                  <button style={{ ...styles.dlBtn, padding: "10px 16px", height: "fit-content" }} onClick={downloadReport} disabled={downloading}>
+                    {downloading ? "..." : "↓ Daily"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Monthly Report */}
+              <div style={{ background: "var(--bg-elevated)", padding: 16, borderRadius: 12, border: "1px solid var(--border-light)" }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Monthly Report</h3>
+                <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
+                  Download the attendance summary for the current month.
+                </p>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button style={{ ...styles.dlBtn, flex: 1, background: "var(--accent-blue-dim)", color: "var(--accent-blue)", border: "1px solid rgba(59,130,246,0.3)" }} onClick={() => downloadMonthlyReport("staff")} disabled={downloading}>
+                    {downloading ? "..." : "↓ Staff"}
+                  </button>
+                  <button style={{ ...styles.dlBtn, flex: 1, background: "var(--accent-green-dim)", color: "var(--accent-green)", border: "1px solid rgba(34,197,94,0.3)" }} onClick={() => downloadMonthlyReport("student")} disabled={downloading}>
+                    {downloading ? "..." : "↓ Students"}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
