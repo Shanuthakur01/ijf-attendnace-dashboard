@@ -24,7 +24,7 @@ export async function GET(request: Request) {
         .collection("staff_embeddings")
         .find({}, { projection: { name: 1, _id: 0 } })
         .toArray()
-    ).map((d) => d.name as string);
+    ).map((d) => d.name as string).filter(name => !name.toLowerCase().includes("pallavi"));
 
     const records = (await db
       .collection("attendance")

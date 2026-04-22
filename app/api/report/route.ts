@@ -22,8 +22,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: `No records found for ${date}` }, { status: 404 });
   }
 
-  const staffRecords = records.filter((r) => r.name?.toLowerCase().includes("staff"));
-  const studentRecords = records.filter((r) => !r.name?.toLowerCase().includes("staff"));
+  const filteredRecords = records.filter((r) => !r.name?.toLowerCase().includes("pallavi"));
+  const staffRecords = filteredRecords.filter((r) => r.name?.toLowerCase().includes("staff"));
+  const studentRecords = filteredRecords.filter((r) => !r.name?.toLowerCase().includes("staff"));
 
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("Attendance Report");
